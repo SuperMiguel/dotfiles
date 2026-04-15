@@ -6,6 +6,12 @@ elif [[ -x /usr/local/bin/brew ]]; then
   eval "$(/usr/local/bin/brew shellenv)"
 fi
 
+# Cursor may invoke this helper when probing shell state.
+# Keep a no-op fallback so startup never errors if integration is missing.
+if ! typeset -f dump_zsh_state >/dev/null 2>&1; then
+  dump_zsh_state() { :; }
+fi
+
 # Cursor Agent: proper command detection (run once: curl -L https://iterm2.com/shell_integration/zsh -o ~/.iterm2_shell_integration.zsh)
 if [[ -n $CURSOR_TRACE_ID ]]; then
   PROMPT_EOL_MARK=""
@@ -38,10 +44,12 @@ setopt HIST_IGNORE_SPACE         # ignore commands starting with space
 setopt HIST_REDUCE_BLANKS        # trim extra blanks
 setopt NO_BEEP                   # turn off terminal beep
 
-eval "$(starship init zsh)"
+if [[ -o interactive ]] && [[ "$TERM" != "dumb" ]] && command -v starship &>/dev/null; then
+  eval "$(starship init zsh)"
+fi
 
 # Auto-start tmux in normal terminals only (never inside Cursor/VS Code — avoids "Unable to resolve your shell environment")
-if command -v tmux &>/dev/null && [ -z "$TMUX" ] && [[ "$TERM_PROGRAM" != "vscode" && "$TERM_PROGRAM" != "Cursor" && -z $CURSOR_TRACE_ID ]]; then
+if [[ -t 1 ]] && command -v tmux &>/dev/null && [ -z "$TMUX" ] && [[ "$TERM_PROGRAM" != "vscode" && "$TERM_PROGRAM" != "Cursor" && -z $CURSOR_TRACE_ID ]]; then
   if tmux has-session 2>/dev/null; then
     exec tmux attach-session
   else
@@ -124,8 +132,12 @@ knsf() {
   [[ -n "$ns" ]] && kubectl config set-context --current --namespace "$ns"
 }
 
-eval $(thefuck --alias)
-eval "$(mcfly init zsh)"
+if command -v thefuck &>/dev/null; then
+  eval "$(thefuck --alias)"
+fi
+if command -v mcfly &>/dev/null; then
+  eval "$(mcfly init zsh)"
+fi
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 
 # Completions (compinit -C = fast load; run "rm ~/.zcompdump && compinit" to rebuild)
@@ -159,10 +171,16 @@ hist() {
   fi
 }
 
-# direnv 
-eval "$(direnv hook zsh)"
-eval "$(uv generate-shell-completion zsh)"
-eval "$(mise activate zsh)"
+# direnv and env managers
+if command -v direnv &>/dev/null; then
+  eval "$(direnv hook zsh)"
+fi
+if command -v uv &>/dev/null; then
+  eval "$(uv generate-shell-completion zsh)"
+fi
+if command -v mise &>/dev/null; then
+  eval "$(mise activate zsh)"
+fi
 
 # Homebrew zsh plugins
 # zsh-autosuggestions should be sourced after completion is set up
@@ -177,3 +195,7 @@ fi
 
 # Ensure sourced .zshrc exits 0 (fixes Cursor "Unable to resolve your shell environment" when brew etc. not in PATH)
 true
+if command -v go &>/dev/null; then
+  export PATH="$PATH:$(go env GOPATH)/bin"
+fi
+

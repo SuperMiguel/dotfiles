@@ -43,3 +43,5 @@ venv/
 .config/zed
 .config/thefuck
 .config/mise
+.config/argocd
+.config/op
